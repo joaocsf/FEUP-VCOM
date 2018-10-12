@@ -8,7 +8,7 @@ def processImage(image):
     maxH = 125
     minH = 80
 
-    minS = 40
+    minS = 20
     maxS = 150
 
     
@@ -19,10 +19,17 @@ def processImage(image):
     upper = (maxH, maxS, 255)
     mask = cv.inRange(hsvImage, lower, upper)
 
+
     contours= cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+    hull_list = []
+    for contour in contours[1]:
+        hull = cv.convexHull(contour)
+        hull_list.append(hull)
 
 
     cv.drawContours(image, contours[1], -1, (255,0,0), 2)
+    cv.drawContours(image, hull_list, -1, (0,0,255), 2)
 #    cv.erode(mask, (5,5))
     # cv.dilate(mask, (5,5))
 
@@ -40,7 +47,7 @@ def test():
         if(cv.waitKey(1) == 27):
             break
 
-    image = cv.imread('hand.jpg', cv.IMREAD_COLOR)
+    image = cv.imread('hands.jpg', cv.IMREAD_COLOR)
 
     image = cv.GaussianBlur(image, (5,5), 1)
     processImage(image)
