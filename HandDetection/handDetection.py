@@ -122,11 +122,8 @@ def calculate_hand_points(contours):
         handPoints = []
         length = 0.01*cv.arcLength(contour, True)
         hull = cv.convexHull(contour)
-        hull_list.append(hull)
-        centers.append(calculate_center(hull))
 
         defects = compute_convexity_defects(contour, cv.convexHull(contour, returnPoints=False))
-        defect_list.append(defects)
 
         for i in range(defects.shape[0]) :
             s, e, _, _ = defects[i,0]
@@ -135,6 +132,12 @@ def calculate_hand_points(contours):
             add_point_to_hand(handPoints, start, length)
             add_point_to_hand(handPoints, end, length)
 
+        if(len(handPoints) == 0):
+            continue
+
+        hull_list.append(hull)
+        centers.append(calculate_center(hull))
+        defect_list.append(defects)
         handPoints = np.array(handPoints, np.int32)
         hands.append(handPoints)
 
@@ -175,7 +178,6 @@ def processImage(image):
     minH = 0
     maxH = 30
 
-
     minS = 7
     maxS = 250
 
@@ -201,7 +203,8 @@ def processImage(image):
     cv.drawContours(image, hull_list, -1, (0, 0, 255), 2)
 
     # Draw the convex hand shape using points of interest
-    cv.drawContours(image, hands, -1, (200, 200, 200), 2)
+    if(len(hands) != 0):
+        cv.drawContours(image, hands, -1, (200, 200, 200), 2)
 
     # Draw a point in each POI
     for index, hand in enumerate(hands):
