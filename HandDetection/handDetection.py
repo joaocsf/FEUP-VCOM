@@ -10,7 +10,6 @@ from math import acos
 mouseX = 0
 mouseY = 0
 
-
 def clustering(image):
     Z = image.reshape((-1, 3))
     Z = np.float32(Z)
