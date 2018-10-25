@@ -162,6 +162,22 @@ def show_svg(event, x, y, flrags, param):
 def nothing(x):
     pass
 
+def findCenter(distance_transform):
+
+    center =  np.unravel_index(distance_transform.argmax(), distance_transform.shape)
+
+    # max_value = 0
+    # center = (0,0)
+    # h, w = distance_transform.shape[:2]
+    # for x in range(0, w):
+    #     for y in range(0, h):
+    #         value = distance_transform[y,x]
+    #         if(value > max_value):
+    #             max_value = value
+    #             center = (y,x)
+    
+    return (center[1], center[0])
+
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
@@ -251,24 +267,47 @@ def processImage(image):
         cv.putText(image, value, (10, 100), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2, cv.LINE_AA)
         cv.circle(image, (mouseX, mouseY), 10, (0,255,255), 10, cv.LINE_4)
 
+    distance_transform = cv.distanceTransform(mask, cv.DIST_L2, 3)
+    dist = cv.normalize(distance_transform, distance_transform, 0, 1, cv.NORM_MINMAX)
+    center = findCenter(dist)
+    
+    cv.circle(image, center, 5, (0,0,255), 2)
+
     # Show each mask used
     cv.imshow("Hand", image)
     cv.imshow("HSV", hsvImage)
     cv.imshow("Mask", mask)
+    cv.imshow("Distance Transform", dist)
     return image
 
 def findHSVValues(image):
     image = cv.GaussianBlur(image, (5,5), 2) 
-    hsv_image = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    hls_image = cv.cvtColor(image, cv.COLOR_BGR2YCrCb)
 
-    color = ('b', 'r')
+    #(h, l, s) = cv.split(hls_image)
 
-    for i, col in enumerate(color):
-        hist = cv.calcHist([hsv_image], [i], None, [256], [0, 256])
-        plt.plot(hist, color=col)
-        plt.xlim([0,256])
+    # hls_image = cv.pyrMeanShiftFiltering(hls_image, 20, 60, maxLevel=2)
+    # lower = (0, 50, 50)
+    # upper = (30, 250, 140)
+    # mask = cv.inRange(hls_image, lower, upper)
+
+    bw_image = cv.cvtColor(hls_image, cv.COLOR_BGR2GRAY)
+    mask = cv.adaptiveThreshold(bw_image, 128, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 3, 5)
+    cv.imshow('BW', bw_image)
+
+    #hls_image = cv.merge([h,s,s]) 
+
+    cv.imshow('HSL', hls_image)
+    cv.imshow('Mask', mask)
+    #color = ('b', 'r')
+
+    # for i, col in enumerate(color):
+    #     hist = cv.calcHist([hsv_image], [i], None, [256], [0, 256])
+    #     plt.plot(hist, color=col)
+    #     plt.xlim([0,256])
     
-    plt.show()
+    # plt.show()
+    return hls_image
 
 
 def test():
@@ -278,14 +317,13 @@ def test():
     # cv.createTrackbar('minS','Hand',0,255,nothing)
     # cv.createTrackbar('maxS','Hand',0,255,nothing)
 
-
     video = cv.VideoCapture(0)
     while(True):
         _, img = video.read()
-        # processImage(img)
-        findHSVValues(img)
-
-        if(cv.waitKey(10000) == 27):
+        processImage(img)
+        #findHSVValues(img)
+    
+        if(cv.waitKey(1) == 27):
             break
 
     # Image read
@@ -293,11 +331,13 @@ def test():
 
     result = processImage(image)
 
-    hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
+    #hsvImage = findHSVValues(image)
+
+    #hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
 
     # plt.xlabel('Hue') 
     # plt.ylabel('Saturation') 
-    # (h, s, v) = cv.split(hsvImage)
+    # (l, s, h) = cv.split(hsvImage)
     # plt.scatter(h, s, label = "test")
     # plt.legend()
     # plt.show()
