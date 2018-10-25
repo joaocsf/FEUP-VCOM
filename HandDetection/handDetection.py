@@ -117,6 +117,7 @@ def calculate_hand_points(contours):
     hull_list = []
     defect_list = []
     centers = []
+    used_contour = []
     for contour in contours:
         handPoints = []
         length = 0.01*cv.arcLength(contour, True)
@@ -133,21 +134,22 @@ def calculate_hand_points(contours):
 
         if(len(handPoints) == 0):
             continue
-
+        
+        used_contour.append(contour)
         hull_list.append(hull)
         centers.append(calculate_center(hull))
         defect_list.append(defects)
         handPoints = np.array(handPoints, np.int32)
         hands.append(handPoints)
 
-    return (hands, hull_list, defect_list, centers)
+    return (hands, hull_list, defect_list, centers, used_contour)
 
 # Filters the Contour Size to limit small objects
 def filter_contour_size(contours, imageArea):
     final_contours = []
     for contour in contours:
         area = cv.contourArea(contour)
-        if area >= imageArea/8:
+        if area >= imageArea/16:
             final_contours.append(contour)
     
     return np.array(final_contours)
@@ -157,10 +159,13 @@ def show_svg(event, x, y, flrags, param):
     if(event == cv.EVENT_LBUTTONDBLCLK):
         [mouseX, mouseY] = [x, y]
 
+def nothing(x):
+    pass
+
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (5, 5), 4)
+    image = cv.GaussianBlur(image, (5, 5), 5)
     imageArea = image.shape[0] * image.shape[1]
     print('Area:', imageArea)
 
@@ -175,18 +180,26 @@ def processImage(image):
 
     # Calculate the lower and upper HS values
     minH = 0
-    maxH = 30
+    maxH = 70
 
-    minS = 7
+    minS = 100
     maxS = 250
+
+    # minH = cv.getTrackbarPos('minH','Hand')
+    # minH = cv.getTrackbarPos('minH','Hand')
+    # maxH = cv.getTrackbarPos('maxH','Hand')
+    # minS = cv.getTrackbarPos('minS','Hand')
+    # maxS = cv.getTrackbarPos('maxS','Hand')
 
     lower = (minH,minS, 0)
     upper = (maxH, maxS, 255)
 
+    
+
     # Mask HS Values
     mask = cv.inRange(hsvImage, lower, upper)
 
-    cv.erode(mask, (5,5), iterations=2)
+    #cv.erode(mask, (5,5), iterations=2)
     cv.dilate(mask, (5,5), iterations=3)
 
     # Find the contours of different hands
@@ -195,7 +208,7 @@ def processImage(image):
     contours = filter_contour_size(contours, imageArea)
 
     # Calculate points closest to a Point of Interest
-    hands, hull_list, defect_list, centers = calculate_hand_points(contours)
+    hands, hull_list, defect_list, centers, contours = calculate_hand_points(contours)
 
     # Draw the original contours and their respective hulls
     cv.drawContours(image, contours, -1, (255, 0, 0), 2)
@@ -244,13 +257,35 @@ def processImage(image):
     cv.imshow("Mask", mask)
     return image
 
+def findHSVValues(image):
+    image = cv.GaussianBlur(image, (5,5), 2) 
+    hsv_image = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+
+    color = ('b', 'r')
+
+    for i, col in enumerate(color):
+        hist = cv.calcHist([hsv_image], [i], None, [256], [0, 256])
+        plt.plot(hist, color=col)
+        plt.xlim([0,256])
+    
+    plt.show()
+
+
 def test():
+    # cv.namedWindow('Hand')
+    # cv.createTrackbar('minH','Hand',0,255,nothing)
+    # cv.createTrackbar('maxH','Hand',0,255,nothing)
+    # cv.createTrackbar('minS','Hand',0,255,nothing)
+    # cv.createTrackbar('maxS','Hand',0,255,nothing)
+
+
     video = cv.VideoCapture(0)
     while(True):
         _, img = video.read()
-        processImage(img)
+        # processImage(img)
+        findHSVValues(img)
 
-        if(cv.waitKey(1) == 27):
+        if(cv.waitKey(10000) == 27):
             break
 
     # Image read
@@ -260,14 +295,14 @@ def test():
 
     hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
 
-    # plt.xlabel('Hue')
-    # plt.ylabel('Saturation')
+    # plt.xlabel('Hue') 
+    # plt.ylabel('Saturation') 
     # (h, s, v) = cv.split(hsvImage)
     # plt.scatter(h, s, label = "test")
     # plt.legend()
     # plt.show()
-
-
+# 
+ #
 test()
 
 while(cv.waitKey(0) != 27): continue
