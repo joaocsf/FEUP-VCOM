@@ -74,7 +74,8 @@ def processImage(image):
         cv.line(image, start, end, [0, 255, 0], 2)
 
     # Show each mask used
-    #cv.imshow("Hand", image)
+    cv.imshow("Hand", image)
+    while(cv.waitKey(0) != 27): continue
     #cv.imshow("HSV", hsvImage)
     #cv.imshow("Mask", mask)
     #cv.imshow("Thresholded", threshold)

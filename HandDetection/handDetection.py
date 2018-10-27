@@ -198,6 +198,7 @@ def drawResultsInImage(image, hands, hull_list, defect_list, centers, contours):
 
     # Show each mask used
     cv.imshow("Hand", image)
+    while(cv.waitKey(0) != 27): continue
     #cv.imshow("HSV", hsvImage)
     #cv.imshow("Mask", mask)
 
@@ -241,7 +242,7 @@ def processImage(image):
     # Calculate points closest to a Point of Interest
     hands, hull_list, defect_list, centers = calculate_hand_points(contours)
 
-    #drawResultsInImage(image, hands, hull_list, defect_list, centers, contours)
+    drawResultsInImage(image, hands, hull_list, defect_list, centers, contours)
 
     res = []
     for index, defects in enumerate(defect_list):
