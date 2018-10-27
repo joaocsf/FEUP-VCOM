@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pprint import pprint
 import math
-
 from math import sqrt
 from math import acos
 
@@ -23,7 +22,6 @@ def clustering(image):
     res2 = res.reshape((image.shape))
 
     return res2
-
 
 # Change the calculation to somehow use the average position of the point
 def add_point_to_hand(handPoints, newPoint, minDistance=20):
@@ -78,7 +76,6 @@ def angle(pc, p1, p2):
 
     return acos(res)
     
-
 # Calculates the convexity Defects Filtering Unecessary Points
 def compute_convexity_defects(contour, hull, threshold=80):
     length = 0.01*cv.arcLength(contour, True)
@@ -103,7 +100,7 @@ def compute_convexity_defects(contour, hull, threshold=80):
     result = np.array(result)
     return result
 
-# Calculate the center of the gull
+# Calculate the center of the hull
 def calculate_center(hull):
     M = cv.moments(hull)
     x = int(M["m10"] / M["m00"]) 
@@ -157,46 +154,7 @@ def show_svg(event, x, y, flrags, param):
     if(event == cv.EVENT_LBUTTONDBLCLK):
         [mouseX, mouseY] = [x, y]
 
-def processImage(image):
-    global mouseX, mouseY
-    # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (5, 5), 4)
-    imageArea = image.shape[0] * image.shape[1]
-    print('Area:', imageArea)
-
- 
-    # Convert to HSV color-space
-    hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
-    #hsvImage = clustering(hsvImage)
-    
-    # Create a black image, a window and bind the function to window
-    cv.namedWindow('Hand')
-    cv.setMouseCallback('Hand',show_svg)
-
-    # Calculate the lower and upper HS values
-    minH = 0
-    maxH = 30
-
-    minS = 7
-    maxS = 250
-
-    lower = (minH,minS, 0)
-    upper = (maxH, maxS, 255)
-
-    # Mask HS Values
-    mask = cv.inRange(hsvImage, lower, upper)
-
-    cv.erode(mask, (5,5), iterations=2)
-    cv.dilate(mask, (5,5), iterations=3)
-
-    # Find the contours of different hands
-    ret, contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-
-    contours = filter_contour_size(contours, imageArea)
-
-    # Calculate points closest to a Point of Interest
-    hands, hull_list, defect_list, centers = calculate_hand_points(contours)
-
+def drawResultsInImage(image, hands, hull_list, defect_list, centers, contours):
     # Draw the original contours and their respective hulls
     cv.drawContours(image, contours, -1, (255, 0, 0), 2)
     cv.drawContours(image, hull_list, -1, (0, 0, 255), 2)
@@ -240,9 +198,56 @@ def processImage(image):
 
     # Show each mask used
     cv.imshow("Hand", image)
-    cv.imshow("HSV", hsvImage)
-    cv.imshow("Mask", mask)
-    return image
+    #cv.imshow("HSV", hsvImage)
+    #cv.imshow("Mask", mask)
+
+def processImage(image):
+    global mouseX, mouseY
+    # Apply Gaussian blur
+    image = cv.GaussianBlur(image, (5, 5), 4)
+    imageArea = image.shape[0] * image.shape[1]
+    # print('Area:', imageArea)
+
+ 
+    # Convert to HSV color-space
+    hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    #hsvImage = clustering(hsvImage)
+    
+    # Create a black image, a window and bind the function to window
+    cv.namedWindow('Hand')
+    cv.setMouseCallback('Hand',show_svg)
+
+    # Calculate the lower and upper HS values
+    minH = 0
+    maxH = 30
+
+    minS = 7
+    maxS = 250
+
+    lower = (minH,minS, 0)
+    upper = (maxH, maxS, 255)
+
+    # Mask HS Values
+    mask = cv.inRange(hsvImage, lower, upper)
+
+    cv.erode(mask, (5,5), iterations=2)
+    cv.dilate(mask, (5,5), iterations=3)
+
+    # Find the contours of different hands
+    ret, contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+    contours = filter_contour_size(contours, imageArea)
+
+    # Calculate points closest to a Point of Interest
+    hands, hull_list, defect_list, centers = calculate_hand_points(contours)
+
+    #drawResultsInImage(image, hands, hull_list, defect_list, centers, contours)
+
+    res = []
+    for index, defects in enumerate(defect_list):
+        res.append(len(defects)+1)
+    
+    return res
 
 def testRealTime():
     video = cv.VideoCapture(0)
@@ -254,13 +259,11 @@ def testRealTime():
             break
 
 def test():
-
-    # Image read
     image = cv.imread('hands.jpg', cv.IMREAD_COLOR)
-
     result = processImage(image)
+    print(result)
 
-    hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
+    # hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
 
     # plt.xlabel('Hue')
     # plt.ylabel('Saturation')
@@ -271,6 +274,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-
-test()
+# test()
 
