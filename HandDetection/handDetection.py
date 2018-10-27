@@ -244,7 +244,7 @@ def processImage(image):
     cv.imshow("Mask", mask)
     return image
 
-def test():
+def testRealTime():
     video = cv.VideoCapture(0)
     while(True):
         _, img = video.read()
@@ -252,6 +252,8 @@ def test():
 
         if(cv.waitKey(1) == 27):
             break
+
+def test():
 
     # Image read
     image = cv.imread('hands.jpg', cv.IMREAD_COLOR)
@@ -267,7 +269,8 @@ def test():
     # plt.legend()
     # plt.show()
 
+    while(cv.waitKey(0) != 27): continue
+
 
 test()
 
-while(cv.waitKey(0) != 27): continue
