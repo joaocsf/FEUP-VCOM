@@ -13,10 +13,10 @@ def processImage(image):
 
     # Calculate the lower and upper HS values
     minH = 0
-    maxH = 30
+    maxH = 50
 
-    minS = 0
-    maxS = 255
+    minS = 255 * 0.23
+    maxS = 255 * 0.68
 
     lower = (minH, minS, 0)
     upper = (maxH, maxS, 255)
