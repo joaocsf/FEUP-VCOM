@@ -154,7 +154,7 @@ def show_svg(event, x, y, flrags, param):
     if(event == cv.EVENT_LBUTTONDBLCLK):
         [mouseX, mouseY] = [x, y]
 
-def drawResultsInImage(image, hands, hull_list, defect_list, centers, contours):
+def drawResultsInImage(mask, image, hands, hull_list, defect_list, centers, contours):
     # Draw the original contours and their respective hulls
     cv.drawContours(image, contours, -1, (255, 0, 0), 2)
     cv.drawContours(image, hull_list, -1, (0, 0, 255), 2)
@@ -197,15 +197,18 @@ def drawResultsInImage(image, hands, hull_list, defect_list, centers, contours):
         cv.circle(image, (mouseX, mouseY), 10, (0,255,255), 10, cv.LINE_4)
 
     # Show each mask used
+    image = cv.resize(image, (500, 500)) 
+    mask = cv.resize(mask, (500, 500)) 
     cv.imshow("Hand", image)
+    cv.imshow("Mask", mask)
     while(cv.waitKey(0) != 27): continue
     #cv.imshow("HSV", hsvImage)
-    #cv.imshow("Mask", mask)
+    
 
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (5, 5), 4)
+    image = cv.GaussianBlur(image, (9, 9), 4)
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
 
@@ -242,7 +245,7 @@ def processImage(image):
     # Calculate points closest to a Point of Interest
     hands, hull_list, defect_list, centers = calculate_hand_points(contours)
 
-    drawResultsInImage(image, hands, hull_list, defect_list, centers, contours)
+    drawResultsInImage(mask, image, hands, hull_list, defect_list, centers, contours)
 
     res = []
     for index, defects in enumerate(defect_list):

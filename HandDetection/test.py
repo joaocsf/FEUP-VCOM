@@ -6,7 +6,7 @@ import math
 
 def processImage(image):
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (3, 3), 0)
+    image = cv.GaussianBlur(image, (9, 9), 4)
 
     # Convert to HSV color-space
     hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
@@ -25,14 +25,14 @@ def processImage(image):
     mask = cv.inRange(hsvImage, lower, upper)
 
     # Morphological transformations to filter
-    erode = cv.erode(mask, np.ones((5, 5)), iterations=1)
-    dilation = cv.dilate(erode, np.ones((5, 5)), iterations=1)
+    erode = cv.erode(mask, np.ones((5, 5)), iterations=2)
+    dilation = cv.dilate(erode, np.ones((5, 5)), iterations=3)
 
-    filtered = cv.GaussianBlur(dilation, (5, 5), 0)
-    ret, threshold = cv.threshold(filtered, 120, 255, 0)
+    #filtered = cv.GaussianBlur(dilation, (5, 5), 0)
+    #ret, threshold = cv.threshold(filtered, 120, 255, 0)
 
     # Find the contours
-    ret, contours, hierarchy = cv.findContours(threshold, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    ret, contours, hierarchy = cv.findContours(dilation, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
 
     # Find contour with maximum area
     contour = max(contours, key=lambda x: cv.contourArea(x))
@@ -61,24 +61,33 @@ def processImage(image):
         end = tuple(contour[e][0])
         far = tuple(contour[f][0])
 
+        cv.line(image, start, end, [0, 255, 0], 2)
+
         a = math.sqrt((end[0] - start[0])**2 + (end[1] - start[1])**2)
         b = math.sqrt((far[0] - start[0])**2 + (far[1] - start[1])**2)
         c = math.sqrt((end[0] - far[0])**2 + (end[1] - far[1])**2)
         angle = (math.acos((b**2 + c**2 - a**2)/(2*b*c))*180)/3.14
 
+        # far point is below the start and end points
+        if far[1] < start[1] or far[1] < end[1]:
+            continue
+        
         # if angle > 90 draw a circle at the far point
         if angle <= 90:
             count_defects += 1
-            cv.circle(image, far, 1, [0, 0, 255], -1)
-
-        cv.line(image, start, end, [0, 255, 0], 2)
+            print(start, end, far)
+            cv.circle(image, far, 5, [0, 0, 255], -1)
+            cv.circle(image, end, 5, [255, 0, 255], -1)
+            cv.circle(image, start, 5, [255, 0, 255], -1)
 
     # Show each mask used
+    image = cv.resize(image, (500, 500)) 
+    mask = cv.resize(mask, (500, 500)) 
     cv.imshow("Hand", image)
-    while(cv.waitKey(0) != 27): continue
+    cv.imshow("Mask", mask)
     #cv.imshow("HSV", hsvImage)
-    #cv.imshow("Mask", mask)
     #cv.imshow("Thresholded", threshold)
+    while(cv.waitKey(0) != 27): continue
     num_fingers = count_defects + 1
     hands = []
     hands.append(num_fingers)
