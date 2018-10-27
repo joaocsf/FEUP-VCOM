@@ -208,7 +208,7 @@ def drawResultsInImage(mask, image, hands, hull_list, defect_list, centers, cont
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (9, 9), 4)
+    image = cv.GaussianBlur(image, (5, 5), 4)
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
 

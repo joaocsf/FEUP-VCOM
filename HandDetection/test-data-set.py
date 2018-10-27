@@ -7,7 +7,7 @@ from test import processImage as processImg2
 
 def testOneHandImg(pathImg):
     image = cv.imread(pathImg, cv.IMREAD_COLOR)
-    hands = processImg1(image) # CHANGE FUNCTION HERE!!!
+    hands = processImg2(image) # CHANGE FUNCTION HERE!!!
     
     if len(hands) != 1:
         print('Error: found', len(hands), "hands, when only exists one hand")

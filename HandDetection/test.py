@@ -15,7 +15,7 @@ def processImage(image):
     minH = 0
     maxH = 50
 
-    minS = 255 * 0.23
+    minS = 255 * 0.21
     maxS = 255 * 0.68
 
     lower = (minH, minS, 0)
@@ -25,10 +25,10 @@ def processImage(image):
     mask = cv.inRange(hsvImage, lower, upper)
 
     # Morphological transformations to filter
-    erode = cv.erode(mask, np.ones((5, 5)), iterations=2)
-    dilation = cv.dilate(erode, np.ones((5, 5)), iterations=3)
+    erode = cv.erode(mask, np.ones((3, 3)), iterations=2)
+    dilation = cv.dilate(erode, np.ones((3, 3)), iterations=3)
 
-    #filtered = cv.GaussianBlur(dilation, (5, 5), 0)
+    #filtered = cv.GaussianBlur(dilation, (5, 5), 4)
     #ret, threshold = cv.threshold(filtered, 120, 255, 0)
 
     # Find the contours
@@ -75,7 +75,6 @@ def processImage(image):
         # if angle > 90 draw a circle at the far point
         if angle <= 90:
             count_defects += 1
-            print(start, end, far)
             cv.circle(image, far, 5, [0, 0, 255], -1)
             cv.circle(image, end, 5, [255, 0, 255], -1)
             cv.circle(image, start, 5, [255, 0, 255], -1)
