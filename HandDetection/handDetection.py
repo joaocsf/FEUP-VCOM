@@ -9,6 +9,31 @@ from math import acos
 mouseX = 0
 mouseY = 0
 
+class Hand:
+    def __init__(self, contour, hull, center, defects, points, rect ):
+        self.contour = contour
+        self.hull = hull
+        self.center = center
+        self.defects = defects
+        self.points = points
+        self.fingers = len(defects) + 1
+        self.rect = rect
+
+        x,y,w,h = rect
+
+        self.width = w
+        self.height = h
+        self.big_radius = 0
+        self.debug_points = []
+        self.top_left = (x,y)
+        self.bottom_right = (x + w,y + h)
+    
+    def setLocalCenter(self, local_center):
+        self.local_center = local_center
+        x,y = self.top_left
+        lx, ly = local_center
+        self.center = (x + lx, y + ly)
+
 def clustering(image):
     Z = image.reshape((-1, 3))
     Z = np.float32(Z)
@@ -77,12 +102,16 @@ def angle(pc, p1, p2):
     return acos(res)
     
 # Calculates the convexity Defects Filtering Unecessary Points
-def compute_convexity_defects(contour, hull, threshold=80):
-    length = 0.01*cv.arcLength(contour, True)
+def compute_convexity_defects(contour, hull, threshold=90):
+    length = 0.005*cv.arcLength(contour, True)
     lengthSQR = length * length
     thresh = math.pi * threshold / 180
-    defects = cv.convexityDefects(contour, hull)
     result = []
+
+    if(cv.isContourConvex(contour)):
+            return np.array(result)
+
+    defects = cv.convexityDefects(contour, hull)
     for i in range(defects.shape[0]):
         defect = defects[i]
         s, e, f, d = defect[0]
@@ -94,7 +123,11 @@ def compute_convexity_defects(contour, hull, threshold=80):
 
         ang = angle(far, start, end)
 
-        if(mDist >= lengthSQR and ang < thresh):
+        #Work around to filter lower convexity points
+        if far[1] < start[1] or far[1] < end[1]:
+            continue
+
+        if(mDist >= lengthSQR and ang <= thresh):
             result.append(defect)
     
     result = np.array(result)
@@ -111,14 +144,12 @@ def calculate_center(hull):
 # Calculates the hull and the respective hand points (Change the calculation to use the point average)
 def calculate_hand_points(contours):
     hands = []
-    hull_list = []
-    defect_list = []
-    centers = []
-    used_contours = []
+
     for contour in contours:
         handPoints = []
         length = 0.01*cv.arcLength(contour, True)
         hull = cv.convexHull(contour)
+        rect = cv.boundingRect(contour)
 
         defects = compute_convexity_defects(contour, cv.convexHull(contour, returnPoints=False))
 
@@ -132,14 +163,17 @@ def calculate_hand_points(contours):
         if(len(handPoints) == 0):
             continue
 
-        used_contours.append(contour)
-        hull_list.append(hull)
-        centers.append(calculate_center(hull))
-        defect_list.append(defects)
         handPoints = np.array(handPoints, np.int32)
-        hands.append(handPoints)
+        hand = Hand(
+            contour,
+            hull, 
+            calculate_center(hull), 
+            defects, 
+            handPoints, 
+            rect)
+        hands.append(hand)
 
-    return (hands, hull_list, defect_list, centers, used_contours)
+    return hands
 
 # Filters the Contour Size to limit small objects
 def filter_contour_size(contours, imageArea):
@@ -163,32 +197,111 @@ def findMaxCoords(matrix):
 
 #Calculates the distance transform of a MASK (useful to find the center of the hand later)
 def calculateDistanceTransform(mask):
-    distance_transform = cv.distanceTransform(mask, cv.DIST_L2, 5) 
+    distance_transform = cv.distanceTransform(mask, cv.DIST_L2, cv.DIST_MASK_PRECISE) 
     cv.normalize(distance_transform, distance_transform, 0, 1.0, cv.NORM_MINMAX)
     return distance_transform
 
-def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, centers, contours):
-    # Draw the original contours and their respective hulls
-    cv.drawContours(image, contours, -1, (255, 0, 0), 2)
-    cv.drawContours(image, hull_list, -1, (0, 0, 255), 2)
+def checkCircle(center, radius):
+    x = radius - 1
+    y = 0
+    dx = 1
+    dy = 1
+    err = dx - (radius << 1)
 
-    # Draw the convex hand shape using points of interest
-    if(len(hands) != 0):
-        cv.drawContours(image, hands, -1, (200, 200, 200), 2)
+def claculatePalmContour():
+    
 
-    # Draw a point in each POI
-    for index, hand in enumerate(hands):
-        center = centers[index]
-        for point in hand:
+    pass
+
+def processHands(hands, mask):
+    i = 0
+    for hand in hands:
+
+        # Correct Hand Fill
+        mask = cv.fillPoly(mask, [hand.contour], (255))
+        h, w = mask.shape[:2]
+        minimum = int( min(w,h) * 0.01)
+        cv.rectangle(mask, (0,0), (w,h), 0, thickness=minimum)
+
+        i += 1
+
+        x1, y1 = hand.top_left
+        x2, y2 = hand.bottom_right
+
+
+        local_mask = mask[y1:y2, x1: x2]
+        distance_transform = cv.distanceTransform(local_mask, cv.DIST_L2, cv.DIST_MASK_PRECISE) 
+        radius = np.amax(distance_transform)
+        cv.normalize(distance_transform, distance_transform, 0, 1.0, cv.NORM_MINMAX)
+
+
+        hand.setLocalCenter(findMaxCoords(distance_transform))
+        hand.radius = radius
+
+        lower_threshold = 0.3
+        hand.big_radius = int(1.4 * radius)
+        dilation = int(lower_threshold * radius)
+        #cv.circle(related_mask, hand.local_center, 10, (0), -1)
+        _, thresh = cv.threshold(distance_transform, lower_threshold, 1.0, cv.THRESH_BINARY)
+
+        cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
+        thresh = thresh.astype(np.uint8)
+
+        im2 = cv.bitwise_xor(local_mask, thresh)
+
+        im2 = calculateDistanceTransform(im2)
+
+        _, thresh = cv.threshold(im2, 0.5, 1.0, cv.THRESH_BINARY)
+        cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
+        thresh = thresh.astype(np.uint8)
+
+
+        cv.imshow("mask {0}".format(i), thresh)
+        cv.imshow("sub {0}".format(i), im2)
+
+        _, contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE) 
+
+        area = hand.width * hand.height
+
+        contours = filter_contour_size(contours, area/50)
+        #hand.fingers = len(contours)
+        print("FINGERS:")
+        print(hand.fingers)
+        
+
+
+def drawResultsInImage(mask, image, hsvImage, hands):
+
+    for hand in hands:
+
+        # Draw the original contours and their respective hulls
+        cv.drawContours(image, hand.contour, -1, (200, 200, 200), 2)
+        cv.drawContours(image, hand.hull, -1, (0, 255, 0), 2)
+
+        # Draw a point in each POI
+        for point in hand.points:
             x,y = point[0]
             cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
-            cv.line(image, center, (x,y), (226,194,65), 2)
-    
-    # Draw Defects Found
-    for index, defects in enumerate(defect_list):
-        print(index)
-        center = centers[index]
-        contour = contours[index]
+            cv.line(image, hand.center, (x,y), (226,194,65), 2)
+
+        pprint(hand.rect)
+        # Draw Enclosing Rect
+        cv.rectangle(image, hand.top_left, hand.bottom_right, (0,255,0))
+
+        print(hand.radius)
+        # Draw Inside Circles 
+        cv.circle(image, hand.center, hand.radius, (255,0,0), 5)
+        cv.circle(image, hand.center, hand.big_radius, (128,0,0), 5)
+
+
+        # Draw Debug Points 
+        for point in hand.debug_points:
+            cv.circle(image, point, (3), (0,255,255), -1)
+
+        # Draw Defects Found
+        defects = hand.defects
+        center = hand.center
+        contour = hand.contour
         text = "Defects: {0} Estimated: {1}".format(len(defects), 1 + len(defects))
         cv.putText(image, text, (center[0] - 0, center[1] + 25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv.LINE_AA)
         for i in range(defects.shape[0]):
@@ -198,7 +311,6 @@ def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, cen
             far = tuple(contour[f][0])
             cv.circle(image, far, 5, (0,255,255), -1)
     
-    for center in centers:
         cv.circle(image, center, 10, (226,194,65), -1)
 
     # Debug Tool To log the HSV Values
@@ -228,7 +340,7 @@ def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, cen
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (5, 5), 4)
+    image = cv.GaussianBlur(image, (9, 9), 4)
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
 
@@ -248,28 +360,38 @@ def processImage(image):
     minS = 7
     maxS = 250
 
+    # maxH = 50
+    # minS = 50
+    # maxS = 255 * 0.68
+    minH = 0
+    maxH = 50
+
+    minS = 255 * 0.21
+    maxS = 255 * 0.68
     lower = (minH,minS, 0)
     upper = (maxH, maxS, 255)
 
     # Mask HS Values
     mask = cv.inRange(hsvImage, lower, upper)
 
-    cv.erode(mask, (5,5), iterations=2)
-    cv.dilate(mask, (5,5), iterations=3)
+    mask = cv.erode(mask, (3,3), iterations=2)
+    mask = cv.dilate(mask, (3,3), iterations=3)
 
     # Find the contours of different hands
     ret, contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
-    contours = filter_contour_size(contours, imageArea)
+    contours = filter_contour_size(contours, imageArea/2)
 
     # Calculate points closest to a Point of Interest
-    hands, hull_list, defect_list, centers, contours = calculate_hand_points(contours)
+    hands = calculate_hand_points(contours)
 
-    drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, centers, contours)
+    processHands(hands, mask)
+
+    drawResultsInImage(mask, image, hsvImage, hands)
 
     res = []
-    for index, defects in enumerate(defect_list):
-        res.append(len(defects)+1)
+    for hand in hands:
+        res.append(hand.fingers)
     
     return res
 
@@ -283,7 +405,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('hands.jpg', cv.IMREAD_COLOR)
+    image = cv.imread('hands2.jpg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
 
@@ -298,5 +420,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-test()
+#test()
 
