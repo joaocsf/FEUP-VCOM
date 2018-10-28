@@ -114,6 +114,7 @@ def calculate_hand_points(contours):
     hull_list = []
     defect_list = []
     centers = []
+    used_contours = []
     for contour in contours:
         handPoints = []
         length = 0.01*cv.arcLength(contour, True)
@@ -131,20 +132,21 @@ def calculate_hand_points(contours):
         if(len(handPoints) == 0):
             continue
 
+        used_contours.append(contour)
         hull_list.append(hull)
         centers.append(calculate_center(hull))
         defect_list.append(defects)
         handPoints = np.array(handPoints, np.int32)
         hands.append(handPoints)
 
-    return (hands, hull_list, defect_list, centers)
+    return (hands, hull_list, defect_list, centers, used_contours)
 
 # Filters the Contour Size to limit small objects
 def filter_contour_size(contours, imageArea):
     final_contours = []
     for contour in contours:
         area = cv.contourArea(contour)
-        if area >= imageArea/8:
+        if area >= imageArea/16:
             final_contours.append(contour)
     
     return np.array(final_contours)
@@ -154,7 +156,7 @@ def show_svg(event, x, y, flrags, param):
     if(event == cv.EVENT_LBUTTONDBLCLK):
         [mouseX, mouseY] = [x, y]
 
-def drawResultsInImage(mask, image, hands, hull_list, defect_list, centers, contours):
+def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, centers, contours):
     # Draw the original contours and their respective hulls
     cv.drawContours(image, contours, -1, (255, 0, 0), 2)
     cv.drawContours(image, hull_list, -1, (0, 0, 255), 2)
@@ -243,9 +245,9 @@ def processImage(image):
     contours = filter_contour_size(contours, imageArea)
 
     # Calculate points closest to a Point of Interest
-    hands, hull_list, defect_list, centers = calculate_hand_points(contours)
+    hands, hull_list, defect_list, centers, contours = calculate_hand_points(contours)
 
-    drawResultsInImage(mask, image, hands, hull_list, defect_list, centers, contours)
+    drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, centers, contours)
 
     res = []
     for index, defects in enumerate(defect_list):
@@ -278,5 +280,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-# test()
+testRealTime()
 
