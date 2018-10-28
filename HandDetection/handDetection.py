@@ -156,6 +156,17 @@ def show_svg(event, x, y, flrags, param):
     if(event == cv.EVENT_LBUTTONDBLCLK):
         [mouseX, mouseY] = [x, y]
 
+def findMaxCoords(matrix):
+    (x, y) = np.unravel_index(matrix.argmax(), matrix.shape) 
+    return (y, x)
+
+
+#Calculates the distance transform of a MASK (useful to find the center of the hand later)
+def calculateDistanceTransform(mask):
+    distance_transform = cv.distanceTransform(mask, cv.DIST_L2, 5) 
+    cv.normalize(distance_transform, distance_transform, 0, 1.0, cv.NORM_MINMAX)
+    return distance_transform
+
 def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, centers, contours):
     # Draw the original contours and their respective hulls
     cv.drawContours(image, contours, -1, (255, 0, 0), 2)
@@ -198,11 +209,18 @@ def drawResultsInImage(mask, image, hsvImage, hands, hull_list, defect_list, cen
         cv.putText(image, value, (10, 100), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2, cv.LINE_AA)
         cv.circle(image, (mouseX, mouseY), 10, (0,255,255), 10, cv.LINE_4)
 
+    distance_transform = calculateDistanceTransform(mask)
+    maxPoint = findMaxCoords(distance_transform)
+    cv.circle(image, maxPoint, 10, (0,0,255))
     # Show each mask used
     image = cv.resize(image, (500, 500)) 
     mask = cv.resize(mask, (500, 500)) 
     cv.imshow("Hand", image)
     cv.imshow("Mask", mask)
+    
+    cv.imshow("DT", distance_transform)
+
+
     while(cv.waitKey(0) != 27): continue
     #cv.imshow("HSV", hsvImage)
     
@@ -280,5 +298,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-testRealTime()
+test()
 
