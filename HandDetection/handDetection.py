@@ -160,8 +160,8 @@ def calculate_hand_points(contours):
             add_point_to_hand(handPoints, start, length)
             add_point_to_hand(handPoints, end, length)
 
-        if(len(handPoints) == 0):
-            continue
+        # if(len(handPoints) == 0):
+        #     continue
 
         handPoints = np.array(handPoints, np.int32)
         hand = Hand(
@@ -208,10 +208,11 @@ def checkCircle(center, radius):
     dy = 1
     err = dx - (radius << 1)
 
-def claculatePalmContour():
-    
-
-    pass
+# Creates a new kernel correctly centered
+def calculateKernel(kernelType, dimension):
+    if dimension & 2 == 1: dimension -= 1
+    dimension_center = int(dimension/2)
+    return cv.getStructuringElement(kernelType, (dimension + 1, dimension + 1), (dimension_center, dimension_center))
 
 def processHands(hands, mask):
     i = 0
@@ -228,43 +229,84 @@ def processHands(hands, mask):
         x1, y1 = hand.top_left
         x2, y2 = hand.bottom_right
 
-
+        # Returns only the pixels related to our hand
         local_mask = mask[y1:y2, x1: x2]
+
+        # Calculate the distance for each pixel to the closest 0
         distance_transform = cv.distanceTransform(local_mask, cv.DIST_L2, cv.DIST_MASK_PRECISE) 
+
+        # Using the max value we can determine the radius of the inner circle (UNUSED)
         radius = np.amax(distance_transform)
+
+        # Normalize the distance_transform to work with propotions instead of pixels
         cv.normalize(distance_transform, distance_transform, 0, 1.0, cv.NORM_MINMAX)
 
 
+        # Set the local center of the hand (This sets the global center correctly)
         hand.setLocalCenter(findMaxCoords(distance_transform))
         hand.radius = radius
 
-        lower_threshold = 0.3
-        hand.big_radius = int(1.4 * radius)
+        # A global threshold of 1/4 of the hand distance seems to work just fine.
+
+        lower_threshold = 0.25
+
+        # Radius of the outer circle, can be used to sample and filter the number of fingers (UNUSED)
+        hand.big_radius = int(lower_threshold * radius)
+
+        # Calculation of the Kernel Size using the hand propotions
         dilation = int(lower_threshold * radius)
-        #cv.circle(related_mask, hand.local_center, 10, (0), -1)
+
+
+        #Calculate the threshold of the hand's palm 
         _, thresh = cv.threshold(distance_transform, lower_threshold, 1.0, cv.THRESH_BINARY)
 
+        # Debuging the distance transform
+        cv.imshow("distance_transform {0}".format(i), distance_transform)
+
+        # Normalize and convert the threshhold to uint8 (to later subtract)
         cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
         thresh = thresh.astype(np.uint8)
+        cv.imshow("thresh {0}".format(i), thresh)
 
-        im2 = cv.bitwise_xor(local_mask, thresh)
+        # Correctly Define the kernel to have expected expansions
+        kernel = calculateKernel(cv.MORPH_ELLIPSE, dilation)
 
-        im2 = calculateDistanceTransform(im2)
+        #Apply opening Manualy with 4 times the dilation
+        #The reason to erode is to get rid of small artifacts (parts of the fingers)
+        #And then dilate the area as much as possible to obtain an reasonably large palm
+        kernel = calculateKernel(cv.MORPH_ELLIPSE, dilation)
+        thresh = cv.morphologyEx(thresh, cv.MORPH_ERODE, kernel, iterations=1)
 
-        _, thresh = cv.threshold(im2, 0.5, 1.0, cv.THRESH_BINARY)
-        cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
-        thresh = thresh.astype(np.uint8)
+        thresh = cv.morphologyEx(thresh, cv.MORPH_DILATE, kernel, iterations=4)
 
+        #Debug the theshold at this point
+        cv.imshow("thresh2 {0}".format(i), thresh)
 
-        cv.imshow("mask {0}".format(i), thresh)
-        cv.imshow("sub {0}".format(i), im2)
+        #To find the fingers subtract the original mask to the palm's mask
+        subtraction = cv.subtract(local_mask, thresh)
 
-        _, contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE) 
+        #Calculate a smaller kernel to erode the fingers
+        #This Erosion is useful to separate fingers that were to close to each other
+        kernel = calculateKernel(cv.MORPH_ELLIPSE, int(dilation/3))
+
+        subtraction = cv.erode(subtraction, kernel, iterations=1)
+
+        #Debug the resulting fingers
+        cv.imshow("SubTraction {0}".format(i), subtraction)
+
+        #Find the contour for each finger
+        _, contours, _ = cv.findContours(subtraction, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE) 
 
         area = hand.width * hand.height
 
-        contours = filter_contour_size(contours, area/50)
-        #hand.fingers = len(contours)
+        #Some times (depending on the image quality) some artifacts may appear
+        #This filter removes the contours with a porpotion less than the area/15
+        #15 was found as a good value via trial and error
+
+        contours = filter_contour_size(contours, area/15)
+
+        #Sets the current number of fingers to the number of filtered contours
+        hand.fingers = len(contours)
         print("FINGERS:")
         print(hand.fingers)
         
@@ -328,9 +370,9 @@ def drawResultsInImage(mask, image, hsvImage, hands):
     image = cv.resize(image, (500, 500)) 
     mask = cv.resize(mask, (500, 500)) 
     cv.imshow("Hand", image)
-    cv.imshow("Mask", mask)
+    # cv.imshow("Mask", mask)
     
-    cv.imshow("DT", distance_transform)
+    # cv.imshow("DT", distance_transform)
 
 
     while(cv.waitKey(0) != 27): continue
@@ -360,12 +402,8 @@ def processImage(image):
     minS = 7
     maxS = 250
 
-    # maxH = 50
-    # minS = 50
-    # maxS = 255 * 0.68
     minH = 0
     maxH = 50
-
     minS = 255 * 0.21
     maxS = 255 * 0.68
     lower = (minH,minS, 0)
@@ -405,7 +443,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('hands2.jpg', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/one-hand/2/images.jpeg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
 
@@ -420,5 +458,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-#test()
+test()
 
