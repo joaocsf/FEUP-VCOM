@@ -422,6 +422,7 @@ def processImage(image):
 
     # Calculate points closest to a Point of Interest
     hands = calculate_hand_points(contours)
+    hands.sort(key=lambda x: x.center[0])
 
     processHands(hands, mask)
 
@@ -458,5 +459,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-test()
+#test()
 

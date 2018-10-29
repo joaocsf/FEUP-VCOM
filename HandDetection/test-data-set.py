@@ -3,11 +3,10 @@ import traceback
 import logging
 import cv2 as cv
 from handDetection import processImage as processImg1
-from test import processImage as processImg2
 
 def testOneHandImg(pathImg):
     image = cv.imread(pathImg, cv.IMREAD_COLOR)
-    hands = processImg2(image) # CHANGE FUNCTION HERE!!!
+    hands = processImg1(image) # CHANGE FUNCTION HERE!!!
     
     if len(hands) != 1:
         print('Error: found', len(hands), "hands, when only exists one hand")
@@ -23,16 +22,32 @@ def testOneHandImg(pathImg):
     print('Success')
     return 0
 
+def testManyHandsImg(pathImg):
+    image = cv.imread(pathImg, cv.IMREAD_COLOR)
+    hands = processImg1(image) # CHANGE FUNCTION HERE!!!
+    print(hands)
+    return 0
 
-def testAllImgs():
-    totalTests = 0;
-    correctAns = 0;
-    rootDir = 'data-set/'
+def testAllManyHandsImgs():
+    rootDir = 'data-set/multiple-hands'
     for dirName, subdirList, fileList in os.walk(rootDir):
         for fname in fileList:
             pathFile = dirName + '/' + fname
-            if pathFile[18] == '0' or pathFile[18] == '1':
-                continue
+            print('----------------------------------------------------')
+            print(pathFile)
+            try:
+                testManyHandsImg(pathFile)
+            except:
+                logging.error(traceback.format_exc())
+
+
+def testAllOneHandImgs():
+    totalTests = 0;
+    correctAns = 0;
+    rootDir = 'data-set/one-hand'
+    for dirName, subdirList, fileList in os.walk(rootDir):
+        for fname in fileList:
+            pathFile = dirName + '/' + fname
             totalTests += 1
             print('----------------------------------------------------')
             print(pathFile)
@@ -48,6 +63,4 @@ def testAllImgs():
     print('Success ratio:', correctAns / totalTests)
     print('***************')        
 
-testAllImgs()
-
-# 0.65 (test), 0.85 (handDetection)
+testAllManyHandsImgs()
