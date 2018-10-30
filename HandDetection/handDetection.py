@@ -446,10 +446,10 @@ def drawResultsInImage(mask, image, hsvImage, hands):
         cv.drawContours(image, hand.hull, -1, (0, 255, 0), 2)
 
         # Draw a point in each POI
-        # for point in hand.points:
-        #     x,y = point[0]
-        #     cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
-        #     cv.line(image, hand.center, (x,y), (226,194,65), 2)
+        for point in hand.points:
+            x,y = point[0]
+            cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
+            cv.line(image, hand.center, (x,y), (226,194,65), 2)
 
         # Draw Enclosing Rect
         cv.rectangle(image, hand.top_left, hand.bottom_right, (0,255,0))
@@ -532,6 +532,7 @@ def processImage(image):
     #image = cv.GaussianBlur(image, (3, 3), 1)
     #GaussianBlur based on image porpotions
     image = cv.GaussianBlur(image, (minP, minP), 4)
+    bwImage = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
@@ -540,19 +541,16 @@ def processImage(image):
     # Convert to HSV color-space
     hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     #hsvImage = clustering(hsvImage)
-    #(h, s, v) = cv.split(hsvImage)
+    # (h, s, v) = cv.split(hsvImage)
     hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
-    # (h2, s, v) = cv.split(hsvImage)
+    #(h, s, v) = cv.split(hsvImage)
     
-    # h = cv.add(h,s)
-
-    # h3 = cv.Sobel(h,cv.CV_16S, 1, 1, ksize = 5)
-    # cv.Laplacian(h, cv.CV_8U, ksize=3)
-    # _, h3 = cv.threshold(h3, 128, 255, cv.THRESH_BINARY)
+    # h3 = cv.Sobel(h,cv.CV_8U, 1, 1, ksize = 3)
+    #_, bwImage = cv.threshold(bwImage, 128, 255, type=cv.THRESH_BINARY_INV)
     # cv.normalize(h3,h3, 0, 255, cv.NORM_MINMAX)
-    # h3 = h3.astype(np.uint8)
-    # h = cv.subtract(h2, h3)
-    # hsvImage = cv.merge([h,s,v])
+    # h3 = np.uint8(h3)
+    #h = cv.multiply(h, bwImage)
+    #hsvImage = cv.merge([h,s,v])
 
     #cv.imshow("Sobel", hsvImage)
     # Create a black image, a window and bind the function to window
