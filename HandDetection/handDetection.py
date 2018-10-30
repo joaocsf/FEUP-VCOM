@@ -33,7 +33,6 @@ class Finger:
         return True
 
     def calculate_tangents_and_normals(self, rect_points, contour):
-        pprint(rect_points)
         p1,p2,p3,p4 = rect_points
         v1 = get_vector(p1, p2)
         v2 = get_vector(p2, p3)
@@ -327,7 +326,6 @@ def calculateKernel(kernelType, dimension):
 def calculate_fingers(hand, contours, handContour):
     for contour in contours:
         rect = cv.minAreaRect(contour)
-        pprint(rect)
         finger = Finger(rect, handContour)
         hand.finger_list.append(finger)
 
@@ -337,7 +335,11 @@ def processHands(hands, mask):
     for hand in hands:
 
         # Correct Hand Fill
-        mask = cv.fillPoly(mask, [hand.contour], (255))
+        height, width = mask.shape[:2]
+
+        blankImage = np.zeros((height, width, 1), np.uint8)
+
+        mask = cv.fillPoly(blankImage, [hand.contour], (255))
         h, w = mask.shape[:2]
         minimum = int( min(w,h) * 0.01)
         cv.rectangle(mask, (0,0), (w,h), 0, thickness=minimum)
@@ -349,6 +351,7 @@ def processHands(hands, mask):
 
         # Returns only the pixels related to our hand
         local_mask = mask[y1:y2, x1: x2]
+        cv.imshow("LocalMask {0}".format(i), local_mask)
         _ , handContours , _ = cv.findContours(local_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
         hand_contour = max(handContours, key=lambda x: cv.contourArea(x))
@@ -448,7 +451,6 @@ def drawResultsInImage(mask, image, hsvImage, hands):
             cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
             cv.line(image, hand.center, (x,y), (226,194,65), 2)
 
-        pprint(hand.rect)
         # Draw Enclosing Rect
         cv.rectangle(image, hand.top_left, hand.bottom_right, (0,255,0))
 
@@ -490,7 +492,6 @@ def drawResultsInImage(mask, image, hsvImage, hands):
             cv.circle(image, top, 5, (0,0,255), -1)
             cv.circle(image, bottom, 5, (255,255,0), -1)
             for line in finger.debug_lines:
-                pprint(line)
                 p1 = tuple(map(sum, zip(line[0], (x,y))))
                 p2 = tuple(map(sum, zip(line[1], (x,y))))
                 cv.line(image, p1, p2, (0,255,0), 3)
@@ -587,7 +588,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/hand-signs/Y/1.png', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
 
