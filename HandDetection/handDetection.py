@@ -446,10 +446,10 @@ def drawResultsInImage(mask, image, hsvImage, hands):
         cv.drawContours(image, hand.hull, -1, (0, 255, 0), 2)
 
         # Draw a point in each POI
-        for point in hand.points:
-            x,y = point[0]
-            cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
-            cv.line(image, hand.center, (x,y), (226,194,65), 2)
+        # for point in hand.points:
+        #     x,y = point[0]
+        #     cv.circle(image, (x, y), 5, (0, 255, 0), thickness=5)
+        #     cv.line(image, hand.center, (x,y), (226,194,65), 2)
 
         # Draw Enclosing Rect
         cv.rectangle(image, hand.top_left, hand.bottom_right, (0,255,0))
@@ -526,7 +526,13 @@ def drawResultsInImage(mask, image, hsvImage, hands):
 def processImage(image):
     global mouseX, mouseY
     # Apply Gaussian blur
-    image = cv.GaussianBlur(image, (9, 9), 4)
+    h,w = image.shape[:2]
+    minP = int(min(h,w) * 0.005)
+    if(minP % 2 == 0): minP += 1
+    #image = cv.GaussianBlur(image, (3, 3), 1)
+    #GaussianBlur based on image porpotions
+    image = cv.GaussianBlur(image, (minP, minP), 4)
+
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
 
@@ -534,7 +540,21 @@ def processImage(image):
     # Convert to HSV color-space
     hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     #hsvImage = clustering(hsvImage)
+    #(h, s, v) = cv.split(hsvImage)
+    hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
+    # (h2, s, v) = cv.split(hsvImage)
     
+    # h = cv.add(h,s)
+
+    # h3 = cv.Sobel(h,cv.CV_16S, 1, 1, ksize = 5)
+    # cv.Laplacian(h, cv.CV_8U, ksize=3)
+    # _, h3 = cv.threshold(h3, 128, 255, cv.THRESH_BINARY)
+    # cv.normalize(h3,h3, 0, 255, cv.NORM_MINMAX)
+    # h3 = h3.astype(np.uint8)
+    # h = cv.subtract(h2, h3)
+    # hsvImage = cv.merge([h,s,v])
+
+    #cv.imshow("Sobel", hsvImage)
     # Create a black image, a window and bind the function to window
     cv.namedWindow('Hand')
     cv.setMouseCallback('Hand',show_svg)
@@ -550,14 +570,16 @@ def processImage(image):
     maxH = 50
     minS = 255 * 0.21
     maxS = 255 * 0.68
-    lower = (minH,minS, 0)
-    upper = (maxH, maxS, 255)
+    maxV = 255
+    minV = 255 * 0
+    lower = (minH,minS, minV)
+    upper = (maxH, maxS, maxV)
 
     # Mask HS Values
     mask = cv.inRange(hsvImage, lower, upper)
 
-    mask = cv.erode(mask, (3,3), iterations=2)
-    mask = cv.dilate(mask, (3,3), iterations=3)
+    mask = cv.erode(mask, (minP,minP), iterations=2)
+    mask = cv.dilate(mask, (minP,minP), iterations=3)
 
     # Find the contours of different hands
     ret, contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
