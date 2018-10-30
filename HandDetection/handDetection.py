@@ -9,6 +9,76 @@ from math import acos
 mouseX = 0
 mouseY = 0
 
+class Finger:
+    def __init__(self, rect, contour):
+        
+        self.rect = rect
+        self.rect_points = cv.boxPoints(rect)
+        self.rect_points = np.int0(self.rect_points)
+        self.width = 0
+        self.height = 0
+        self.debug_lines = []
+        self.calculate_tangents_and_normals(self.rect_points, contour)
+    
+    def insideBounds(self, midpoint, tangent, contour):
+        p1 = vector_add(midpoint, tangent)
+        p2 = vector_sub(midpoint, tangent)
+
+        r1 = cv.pointPolygonTest(contour, p1, False)
+        if(r1 != 1): return False
+
+        r2 = cv.pointPolygonTest(contour, p2, False)
+        if(r2 != 1): return False
+
+        return True
+
+    def calculate_tangents_and_normals(self, rect_points, contour):
+        pprint(rect_points)
+        p1,p2,p3,p4 = rect_points
+        v1 = get_vector(p1, p2)
+        v2 = get_vector(p2, p3)
+
+        length1 = vector_length(v1) 
+        length2 = vector_length(v2) 
+
+        self.width = min(length1, length2)
+        self.height = max(length1, length2)
+
+        if(length1 > self.width):
+            self.tangent = v1
+            self.normal = v2
+            self.width_points = [p2,p3,p4,p1]
+        else:
+            self.tangent = v2
+            self.normal = v1
+            self.width_points = [p1,p2,p3,p4]
+
+        pa,pb,pc,pd = self.width_points 
+        mid = mid_point(pa,pb)
+        tangent = vector_mult(self.tangent, 0.25)
+
+        if not self.insideBounds(mid, tangent, contour):
+            p1, p2, p3, p4 = self.width_points
+            self.width_points = p3,p4, p1,p2
+
+        pa,pb,pc,pd = self.width_points 
+        mid = mid_point(pa,pb)
+
+        mid = vector_to_int(mid)
+
+        self.bottom = mid
+        self.top = vector_to_int(mid_point(pc,pd))
+        self.tangent = vector_sub(self.top, self.bottom)
+
+        tangent = vector_mult(self.tangent, 0.25)
+        add = vector_add(mid, tangent)
+        add = vector_to_int(add)
+
+        self.debug_lines.append([mid, add])
+        #self.debug_lines.append([(p3[0],p3[1]),(p4[0], p4[1])])
+
+        #Exception(e)
+
 class Hand:
     def __init__(self, contour, hull, center, defects, points, rect ):
         self.contour = contour
@@ -18,6 +88,7 @@ class Hand:
         self.points = points
         self.fingers = len(defects) + 1
         self.rect = rect
+        self.finger_list = []
 
         x,y,w,h = rect
 
@@ -27,6 +98,13 @@ class Hand:
         self.debug_points = []
         self.top_left = (x,y)
         self.bottom_right = (x + w,y + h)
+        self.debug = []
+
+        min_rect = cv.minAreaRect(contour)
+        points = cv.boxPoints(min_rect)
+        points = np.int0(points)
+        self.min_rect = min_rect
+        self.min_rect_points = points
     
     def setLocalCenter(self, local_center):
         self.local_center = local_center
@@ -71,6 +149,28 @@ def add_point_to_hand(handPoints, newPoint, minDistance=20):
     m = [sum[0]/count, sum[1]/count]
     handPoints.append(np.array([m]))
 
+
+# Calculate the vector between two points
+def get_vector(p1, p2):
+    return (p2[0] - p1[0] , p2[1] - p1[1])
+
+def vector_add(p1, p2):
+    return (p1[0] + p2[0], p1[1] + p2[1])
+
+def vector_to_int(v):
+    return (int(v[0]), int(v[1]))
+
+def vector_mult(v1, m):
+    return (v1[0]*m, v1[1]*m)
+
+# Subtract Vectors
+def vector_sub(p1, p2):
+    return (p1[0] - p2[0], p1[1] - p2[1])
+
+# Calculate the mean point
+def mid_point(p1, p2):
+    return ((p2[0] + p1[0])/2, (p2[1] + p1[1])/2)
+
 # Optimized to Compare Distances
 def distance_sqr(p1, p2):
     x1, y1 = p1
@@ -82,10 +182,20 @@ def distance_sqr(p1, p2):
 def dot_product(v1, v2):
     return v1[0] * v2[0] + v1[1] * v2[1]
 
-# Computer the vector Length
+# Compute the vector Length
 def vector_length(v):
     x, y = v
     return sqrt(x*x + y*y)
+
+
+# Compute the vector length without the sqr (Used only to compare values)
+def vector_length_sqr(v):
+    x, y = v
+    return x*x + y*y
+
+# Compute the Angle of a Vector
+def vector_angle(vector):
+    angle = math.atan2(vector[1], vector[0])
 
 # Compute Angle Between 3 Points Where PC is the Center Point
 def angle(pc, p1, p2):
@@ -214,6 +324,14 @@ def calculateKernel(kernelType, dimension):
     dimension_center = int(dimension/2)
     return cv.getStructuringElement(kernelType, (dimension + 1, dimension + 1), (dimension_center, dimension_center))
 
+def calculate_fingers(hand, contours, handContour):
+    for contour in contours:
+        rect = cv.minAreaRect(contour)
+        pprint(rect)
+        finger = Finger(rect, handContour)
+        hand.finger_list.append(finger)
+
+
 def processHands(hands, mask):
     i = 0
     for hand in hands:
@@ -231,6 +349,9 @@ def processHands(hands, mask):
 
         # Returns only the pixels related to our hand
         local_mask = mask[y1:y2, x1: x2]
+        _ , handContours , _ = cv.findContours(local_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+
+        hand_contour = max(handContours, key=lambda x: cv.contourArea(x))
 
         # Calculate the distance for each pixel to the closest 0
         distance_transform = cv.distanceTransform(local_mask, cv.DIST_L2, cv.DIST_MASK_PRECISE) 
@@ -247,7 +368,6 @@ def processHands(hands, mask):
         hand.radius = radius
 
         # A global threshold of 1/4 of the hand distance seems to work just fine.
-
         lower_threshold = 0.25
 
         # Radius of the outer circle, can be used to sample and filter the number of fingers (UNUSED)
@@ -305,6 +425,8 @@ def processHands(hands, mask):
 
         contours = filter_contour_size(contours, area/15)
 
+        calculate_fingers(hand, contours, hand_contour)
+
         #Sets the current number of fingers to the number of filtered contours
         hand.fingers = len(contours)
         print("FINGERS:")
@@ -353,7 +475,28 @@ def drawResultsInImage(mask, image, hsvImage, hands):
             far = tuple(contour[f][0])
             cv.circle(image, far, 5, (0,255,255), -1)
     
+        # Draw Possible Center
         cv.circle(image, center, 10, (226,194,65), -1)
+
+
+        # Draw Finger Rectangles
+        (x,y) = hand.top_left
+        for finger in hand.finger_list:
+            offsetedPoints = [ [[lx+x, ly+y]] for [lx,ly] in finger.rect_points ]
+            offsetedPoints = np.array(offsetedPoints)
+            cv.drawContours(image, [offsetedPoints], 0, (255,0,0), 2)
+            top = vector_add(finger.top, (x,y))
+            bottom = vector_add(finger.bottom, (x,y))
+            cv.circle(image, top, 5, (0,0,255), -1)
+            cv.circle(image, bottom, 5, (255,255,0), -1)
+            for line in finger.debug_lines:
+                pprint(line)
+                p1 = tuple(map(sum, zip(line[0], (x,y))))
+                p2 = tuple(map(sum, zip(line[1], (x,y))))
+                cv.line(image, p1, p2, (0,255,0), 3)
+        
+        # Draw Hand Rect
+        cv.drawContours(image, [hand.min_rect_points], 0, (255,0,0), 2)
 
     # Debug Tool To log the HSV Values
     if (mouseX < image.shape[0] and mouseX > 0 and mouseY > 0 and mouseY < image.shape[1]):
@@ -444,7 +587,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('data-set/one-hand/2/images.jpeg', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
 
@@ -459,5 +602,5 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
-#test()
+test()
 
