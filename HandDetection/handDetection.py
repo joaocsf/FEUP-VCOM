@@ -17,7 +17,9 @@ class Finger:
         self.rect_points = np.int0(self.rect_points)
         self.width = 0
         self.height = 0
+        self.index = 0
         self.debug_lines = []
+        self.is_thumb = 0
         self.calculate_tangents_and_normals(self.rect_points, contour)
     
     def insideBounds(self, midpoint, tangent, contour):
@@ -79,7 +81,11 @@ class Finger:
         #Exception(e)
 
 class Hand:
-    def __init__(self, contour, hull, center, defects, points, rect ):
+
+    THUMB_ANGLE = math.pi*35/180
+    Y_ANGLE = math.pi*45/180
+
+    def __init__(self, contour, hull, center, defects, points, rect):
         self.contour = contour
         self.hull = hull
         self.center = center
@@ -91,25 +97,136 @@ class Hand:
 
         x,y,w,h = rect
 
+        self.thumb = None
         self.width = w
         self.height = h
         self.big_radius = 0
         self.debug_points = []
         self.top_left = (x,y)
         self.bottom_right = (x + w,y + h)
-        self.debug = []
+        self.debug_lines = []
+        self.pose = None
 
         min_rect = cv.minAreaRect(contour)
         points = cv.boxPoints(min_rect)
         points = np.int0(points)
         self.min_rect = min_rect
         self.min_rect_points = points
+
+        self.palm_rect_points = []
+    
+    def set_local_palm_rect(self, local_contour):
+        min_rect = cv.minAreaRect(local_contour)
+        points = cv.boxPoints(min_rect)
+        self.palm_rect_points = np.int0(points)
+        p1, p2, p3, p4 = self.palm_rect_points
+        
+        v1 = vector_sub(p2,p1)
+        v2 = vector_sub(p3,p2)
+
+        if(vector_length_sqr(v1) > vector_length_sqr(v2)):
+            self.tangent = v1
+            self.normal = v2
+        else:
+            self.tangent = v2
+            self.normal = v1
+
+        p0 = vector_add(self.center, self.tangent) 
+        p1 = self.center 
+        self.debug_lines.append([p0, p1])
     
     def setLocalCenter(self, local_center):
         self.local_center = local_center
         x,y = self.top_left
         lx, ly = local_center
         self.center = (x + lx, y + ly)
+    
+    def calculate_thumb(self):
+        tangent = self.tangent
+        inverse = vector_sub((0,0), tangent)
+
+        if len(self.finger_list) == 0: return
+        angle = 0
+        thumb = self.finger_list[0]
+
+        for finger in self.finger_list:
+            f_tangent = finger.tangent
+            a1 = vectors_angle(f_tangent, tangent)
+            a2 = vectors_angle(f_tangent, inverse)
+            min_angle = min(a1, a2)
+            if(min_angle > angle):
+                angle  = min_angle
+                thumb = finger
+        if(angle > Hand.THUMB_ANGLE):
+            thumb.is_thumb = True
+            self.thumb = thumb
+    
+    def sort_fingers_by_thumb(self):
+        if self.thumb == None: return
+        thumb_pos = self.thumb.bottom
+        self.finger_list = sorted(self.finger_list, key=lambda finger: distance_sqr(finger.bottom, thumb_pos), reverse=False)
+        i = 0
+        for finger in self.finger_list:
+            finger.index = i
+            i += 1
+
+    def remove_small_fingers(self):
+        if len(self.finger_list) == 0: return
+        height = 0
+        for finger in self.finger_list:
+            height += finger.height
+            print(finger.height)
+        
+        height /= len(self.finger_list)
+
+        sigma = height * 0.4
+        print("Mean {0}".format(height))
+        self.finger_list = [finger for finger in self.finger_list if finger.height > height or height - finger.height < sigma ]
+        self.fingers = len(self.finger_list)
+
+    def processHandPose(self):
+        self.remove_small_fingers()
+        self.calculate_thumb()
+        self.sort_fingers_by_thumb()
+
+        if self.is_y_pose():
+            self.pose = 'Y'
+        elif self.is_ily_pose():
+            self.pose = 'ILY'
+
+        print('Pose: {0}'.format(self.pose))
+    
+    def is_ily_pose(self):
+        if len(self.finger_list) != 3: return
+        if self.thumb == None: return 
+        thumb = self.thumb
+        pinky = self.finger_list[2]
+        pinky_dist = 0
+        indicator = self.finger_list[1]
+        sqr_width = thumb.width * 3
+        sqr_width *= sqr_width
+
+        if distance_sqr(pinky.bottom, indicator.bottom) < sqr_width: return False
+        
+        return vectors_angle(pinky.tangent, thumb.tangent) > Hand.THUMB_ANGLE
+
+
+    def is_y_pose(self):
+        if len(self.finger_list) != 2: return
+        if self.thumb == None: return 
+        pinky = None
+
+        for finger in self.finger_list:
+            if finger != self.thumb:
+                pinky = finger
+
+        distance = distance_sqr(pinky.bottom, self.thumb.bottom)
+
+        sqr_dist = self.thumb.width *4
+        sqr_dist *= sqr_dist
+
+        return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE
+
 
 def clustering(image):
     Z = image.reshape((-1, 3))
@@ -196,10 +313,7 @@ def vector_length_sqr(v):
 def vector_angle(vector):
     angle = math.atan2(vector[1], vector[0])
 
-# Compute Angle Between 3 Points Where PC is the Center Point
-def angle(pc, p1, p2):
-    v1 = (p1[0] - pc[0], p1[1] - pc[1])
-    v2 = (p2[0] - pc[0], p2[1] - pc[1])
+def vectors_angle(v1, v2):
     ab = dot_product(v1,v2)    
     norm_ab = vector_length(v1) * vector_length(v2)
     res = ab/norm_ab
@@ -209,6 +323,12 @@ def angle(pc, p1, p2):
     if(norm_ab == 0): return math.pi
 
     return acos(res)
+
+# Compute Angle Between 3 Points Where PC is the Center Point
+def angle(pc, p1, p2):
+    v1 = (p1[0] - pc[0], p1[1] - pc[1])
+    v2 = (p2[0] - pc[0], p2[1] - pc[1])
+    return vectors_angle(v1, v2)
     
 # Calculates the convexity Defects Filtering Unecessary Points
 def compute_convexity_defects(contour, hull, threshold=90):
@@ -328,7 +448,8 @@ def calculate_fingers(hand, contours, handContour):
         rect = cv.minAreaRect(contour)
         finger = Finger(rect, handContour)
         hand.finger_list.append(finger)
-
+    
+    hand.fingers = len(hand.finger_list)
 
 def processHands(hands, mask):
     i = 0
@@ -405,6 +526,11 @@ def processHands(hands, mask):
         #Debug the theshold at this point
         cv.imshow("thresh2 {0}".format(i), thresh)
 
+        #Calculate the palm rect
+        _ , local_palm_contour , _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+        local_palm_contour = max(local_palm_contour, key=lambda x: cv.contourArea(x))
+        hand.set_local_palm_rect(local_palm_contour)
+
         #To find the fingers subtract the original mask to the palm's mask
         subtraction = cv.subtract(local_mask, thresh)
 
@@ -431,7 +557,8 @@ def processHands(hands, mask):
         calculate_fingers(hand, contours, hand_contour)
 
         #Sets the current number of fingers to the number of filtered contours
-        hand.fingers = len(contours)
+        hand.processHandPose()
+        #hand.fingers = len(contours)
         print("FINGERS:")
         print(hand.fingers)
         
@@ -454,11 +581,13 @@ def drawResultsInImage(mask, image, hsvImage, hands):
         # Draw Enclosing Rect
         cv.rectangle(image, hand.top_left, hand.bottom_right, (0,255,0))
 
-        print(hand.radius)
         # Draw Inside Circles 
         cv.circle(image, hand.center, hand.radius, (255,0,0), 5)
         cv.circle(image, hand.center, hand.big_radius, (128,0,0), 5)
 
+        # Draw Hand's Debug Lines
+        for line in hand.debug_lines:
+            cv.line(image, line[0], line[1], (0,255,0), 3)
 
         # Draw Debug Points 
         for point in hand.debug_points:
@@ -480,14 +609,22 @@ def drawResultsInImage(mask, image, hsvImage, hands):
         # Draw Possible Center
         cv.circle(image, center, 10, (226,194,65), -1)
 
+        (x,y) = hand.top_left
+        # Draw Palm Rect
+        palm_points = [ [[lx+x, ly+y]] for [lx,ly] in hand.palm_rect_points ]
+        palm_points = np.array(palm_points)
+        cv.drawContours(image, [palm_points], 0, (200,100,0), 5)
 
         # Draw Finger Rectangles
-        (x,y) = hand.top_left
         for finger in hand.finger_list:
             offsetedPoints = [ [[lx+x, ly+y]] for [lx,ly] in finger.rect_points ]
             offsetedPoints = np.array(offsetedPoints)
-            cv.drawContours(image, [offsetedPoints], 0, (255,0,0), 2)
+            print(finger.index)
+            color = (255, finger.index * 51, 0) if not finger.is_thumb else (128,255,0)
+            cv.drawContours(image, [offsetedPoints], 0, color, 2)
             top = vector_add(finger.top, (x,y))
+            text = "Index: {0}".format(finger.index)
+            cv.putText(image, text, top, cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv.LINE_AA)
             bottom = vector_add(finger.bottom, (x,y))
             cv.circle(image, top, 5, (0,0,255), -1)
             cv.circle(image, bottom, 5, (255,255,0), -1)
@@ -503,7 +640,6 @@ def drawResultsInImage(mask, image, hsvImage, hands):
     if (mouseX < image.shape[0] and mouseX > 0 and mouseY > 0 and mouseY < image.shape[1]):
         h,s,v = hsvImage[mouseY, mouseX]
         value = "H:{0} S:{1} V:{2}".format(h,s,v)
-        print(value)
         cv.putText(image, value, (10, 100), cv.FONT_HERSHEY_SIMPLEX, 1, (255,255,0), 2, cv.LINE_AA)
         cv.circle(image, (mouseX, mouseY), 10, (0,255,255), 10, cv.LINE_4)
 
@@ -532,7 +668,7 @@ def processImage(image):
     #image = cv.GaussianBlur(image, (3, 3), 1)
     #GaussianBlur based on image porpotions
     image = cv.GaussianBlur(image, (minP, minP), 4)
-    bwImage = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    #bwImage = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
     imageArea = image.shape[0] * image.shape[1]
     # print('Area:', imageArea)
@@ -542,7 +678,7 @@ def processImage(image):
     hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     #hsvImage = clustering(hsvImage)
     # (h, s, v) = cv.split(hsvImage)
-    hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
+    #hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
     #(h, s, v) = cv.split(hsvImage)
     
     # h3 = cv.Sobel(h,cv.CV_8U, 1, 1, ksize = 3)
@@ -608,7 +744,8 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('data-set/hand-signs/Y/1.png', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/hand-signs/ILY/0.png', cv.IMREAD_COLOR)
+    #image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
 
