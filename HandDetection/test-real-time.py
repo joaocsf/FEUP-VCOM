@@ -49,6 +49,7 @@ while camera.isOpened():
         cv.imshow('ori', thresh)
 
         res = processImageRealTime(thresh)
+        print('Result: ', res)
 
     k = cv.waitKey(10)
     if k == 27:  # press ESC to exit
