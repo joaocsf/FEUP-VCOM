@@ -10,14 +10,22 @@ import math
 def get_vector(p1, p2):
     return (p2[0] - p1[0] , p2[1] - p1[1])
 
+# Add Vectors
 def vector_add(p1, p2):
     return (p1[0] + p2[0], p1[1] + p2[1])
 
+# Vector to integers
 def vector_to_int(v):
     return (int(v[0]), int(v[1]))
 
+# Multiply Vectors
 def vector_mult(v1, m):
     return (v1[0]*m, v1[1]*m)
+
+# Normalize Vectors
+def vector_normalize(v):
+    length = vector_length(v)
+    return (v[0]/length, v[1]/length)
 
 # Subtract Vectors
 def vector_sub(p1, p2):
@@ -56,10 +64,12 @@ def vector_angle(vector):
 def vectors_angle(v1, v2):
     ab = dot_product(v1,v2)    
     norm_ab = vector_length(v1) * vector_length(v2)
+
+    if(norm_ab == 0): return math.pi
+
     res = ab/norm_ab
 
     if(res > 1.0): res = 1.0
 
-    if(norm_ab == 0): return math.pi
 
     return acos(res)

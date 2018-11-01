@@ -7,8 +7,8 @@ from utils import *
 class Hand:
 
     THUMB_ANGLE = math.pi*35/180
-    Y_ANGLE = math.pi*45/180
-    L_ANGLE = math.pi*75/180
+    Y_ANGLE = math.pi*40/180
+    L_ANGLE = math.pi*45/180
 
     def __init__(self, contour, hull, center, defects, points, rect):
         self.contour = contour
@@ -160,7 +160,7 @@ class Hand:
 
         distance = distance_sqr(pointer.bottom, self.thumb.bottom)
 
-        sqr_dist = self.thumb.width *6
+        sqr_dist = self.thumb.width * 6
         sqr_dist *= sqr_dist
         
         return distance < sqr_dist and vectors_angle(pointer.tangent, self.thumb.tangent) > Hand.L_ANGLE    
@@ -173,12 +173,21 @@ class Hand:
 
         pinky = self.finger_list[1]
 
+        thumb_pinky = get_vector(self.thumb.bottom, pinky.bottom) 
+
+        hand_normal = vector_normalize(self.normal)
+        horizontal_distance = dot_product(thumb_pinky, hand_normal)
+
+        distance_threshold = self.width/2
+        print(horizontal_distance, distance_threshold)
+        if abs(horizontal_distance) < distance_threshold: return
+
         distance = distance_sqr(pinky.bottom, self.thumb.bottom)
 
         sqr_dist = self.thumb.width *4
         sqr_dist *= sqr_dist
 
-        return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE and vectors_angle(pinky.tangent, self.thumb.tangent) < Hand.L_ANGLE
+        return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE
 
 
     def is_v_pose(self):
