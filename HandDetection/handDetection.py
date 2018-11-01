@@ -84,6 +84,7 @@ class Hand:
 
     THUMB_ANGLE = math.pi*35/180
     Y_ANGLE = math.pi*45/180
+    L_ANGLE = math.pi*75/180
 
     def __init__(self, contour, hull, center, defects, points, rect):
         self.contour = contour
@@ -191,10 +192,17 @@ class Hand:
 
         if self.is_y_pose():
             self.pose = 'Y'
+        elif self.is_l_pose():
+            self.pose = 'L'
+        elif self.is_all_right_pose():
+            self.pose = 'ALL_RIGHT'
         elif self.is_ily_pose():
             self.pose = 'ILY'
         elif self.is_i_pose():
             self.pose = 'I'
+        elif self.is_v_pose():
+            self.pose = 'V'
+        
 
         print('Pose: {0}'.format(self.pose))
     
@@ -213,6 +221,32 @@ class Hand:
         return vectors_angle(pinky.tangent, thumb.tangent) > Hand.THUMB_ANGLE
 
 
+    def is_all_right_pose(self):
+        if len(self.finger_list) != 1: return
+        if len(self.defects) > 0: return
+        if self.thumb == None: return 
+
+        return True
+
+
+    def is_l_pose(self):
+        if len(self.finger_list) != 2: return
+        if len(self.defects) > 0: return
+        if self.thumb == None: return 
+        pointer = None
+
+        for finger in self.finger_list:
+            if finger != self.thumb:
+                pointer = finger
+
+        distance = distance_sqr(pointer.bottom, self.thumb.bottom)
+
+        sqr_dist = self.thumb.width *4
+        sqr_dist *= sqr_dist
+        
+        return distance > sqr_dist and vectors_angle(pointer.tangent, self.thumb.tangent) > Hand.L_ANGLE    
+
+
     def is_y_pose(self):
         if len(self.finger_list) != 2: return
         if self.thumb == None: return 
@@ -227,14 +261,23 @@ class Hand:
         sqr_dist = self.thumb.width *4
         sqr_dist *= sqr_dist
 
-        return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE
+        return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE and vectors_angle(pinky.tangent, self.thumb.tangent) < Hand.L_ANGLE
+
+
+    def is_v_pose(self):
+        if len(self.finger_list) != 2: return
+        if self.thumb != None: return 
+        
+        # V must have 2 fingers (no thumb) and they must be next to each other (1 defect)
+        return len(self.defects) == 1
+
 
     def is_i_pose(self):
         if len(self.finger_list) != 1: return
         if self.thumb != None: return
-       
-        return True
 
+        # Assuming I requires only 1 finger lifted
+        return True
 
 def clustering(image):
     Z = image.reshape((-1, 3))
@@ -752,7 +795,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('data-set/hand-signs/I/2.png', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/hand-signs/Y/1.png', cv.IMREAD_COLOR)
     #image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)
