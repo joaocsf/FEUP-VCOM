@@ -5,9 +5,22 @@ from pprint import pprint
 import math
 from math import sqrt
 from math import acos
-
+DEBUG = False
 mouseX = 0
 mouseY = 0
+real_time = False
+hue_range=[0,50]
+saturation_range=[30,240]
+value_range=[0,255]
+
+sample_points = [
+    [0.5,0.5],
+    [0.4,0.5],
+    [0.6,0.5],
+    [0.5,0.4],
+    [0.5,0.6],
+]
+
 
 class Finger:
     def __init__(self, rect, contour):
@@ -176,12 +189,11 @@ class Hand:
         height = 0
         for finger in self.finger_list:
             height += finger.height
-            print(finger.height)
         
         height /= len(self.finger_list)
 
         sigma = height * 0.4
-        print("Mean {0}".format(height))
+
         self.finger_list = [finger for finger in self.finger_list if finger.height > height or height - finger.height < sigma ]
         self.fingers = len(self.finger_list)
 
@@ -223,7 +235,6 @@ class Hand:
 
     def is_all_right_pose(self):
         if len(self.finger_list) != 1: return
-        if len(self.defects) > 0: return
         if self.thumb == None: return 
 
         return True
@@ -231,20 +242,17 @@ class Hand:
 
     def is_l_pose(self):
         if len(self.finger_list) != 2: return
-        if len(self.defects) > 0: return
         if self.thumb == None: return 
         pointer = None
 
-        for finger in self.finger_list:
-            if finger != self.thumb:
-                pointer = finger
+        pointer = self.finger_list[1]
 
         distance = distance_sqr(pointer.bottom, self.thumb.bottom)
 
-        sqr_dist = self.thumb.width *4
+        sqr_dist = self.thumb.width *6
         sqr_dist *= sqr_dist
         
-        return distance > sqr_dist and vectors_angle(pointer.tangent, self.thumb.tangent) > Hand.L_ANGLE    
+        return distance < sqr_dist and vectors_angle(pointer.tangent, self.thumb.tangent) > Hand.L_ANGLE    
 
 
     def is_y_pose(self):
@@ -252,9 +260,7 @@ class Hand:
         if self.thumb == None: return 
         pinky = None
 
-        for finger in self.finger_list:
-            if finger != self.thumb:
-                pinky = finger
+        pinky = self.finger_list[1]
 
         distance = distance_sqr(pinky.bottom, self.thumb.bottom)
 
@@ -269,6 +275,10 @@ class Hand:
         if self.thumb != None: return 
         
         # V must have 2 fingers (no thumb) and they must be next to each other (1 defect)
+        first,second = self.finger_list
+        distance = first.width * 3
+        distance *= distance
+        return distance_sqr(first.bottom,second.bottom) < distance
         return len(self.defects) == 1
 
 
@@ -503,6 +513,7 @@ def calculate_fingers(hand, contours, handContour):
     hand.fingers = len(hand.finger_list)
 
 def processHands(hands, mask):
+    global DEBUG
     i = 0
     for hand in hands:
 
@@ -523,7 +534,8 @@ def processHands(hands, mask):
 
         # Returns only the pixels related to our hand
         local_mask = mask[y1:y2, x1: x2]
-        cv.imshow("LocalMask {0}".format(i), local_mask)
+        if DEBUG:
+            cv.imshow("LocalMask {0}".format(i), local_mask)
         _ , handContours , _ = cv.findContours(local_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
         hand_contour = max(handContours, key=lambda x: cv.contourArea(x))
@@ -556,12 +568,14 @@ def processHands(hands, mask):
         _, thresh = cv.threshold(distance_transform, lower_threshold, 1.0, cv.THRESH_BINARY)
 
         # Debuging the distance transform
-        cv.imshow("distance_transform {0}".format(i), distance_transform)
+        if DEBUG:
+            cv.mshow("distance_transform {0}".format(i), distance_transform)
 
         # Normalize and convert the threshhold to uint8 (to later subtract)
         cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
         thresh = thresh.astype(np.uint8)
-        cv.imshow("thresh {0}".format(i), thresh)
+        if DEBUG:
+            cv.imshow("thresh {0}".format(i), thresh)
 
         # Correctly Define the kernel to have expected expansions
         kernel = calculateKernel(cv.MORPH_ELLIPSE, dilation)
@@ -575,7 +589,8 @@ def processHands(hands, mask):
         thresh = cv.morphologyEx(thresh, cv.MORPH_DILATE, kernel, iterations=4)
 
         #Debug the theshold at this point
-        cv.imshow("thresh2 {0}".format(i), thresh)
+        if DEBUG:
+            cv.imshow("thresh2 {0}".format(i), thresh)
 
         #Calculate the palm rect
         _ , local_palm_contour , _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
@@ -592,7 +607,8 @@ def processHands(hands, mask):
         subtraction = cv.erode(subtraction, kernel, iterations=1)
 
         #Debug the resulting fingers
-        cv.imshow("SubTraction {0}".format(i), subtraction)
+        if DEBUG:
+            cv.imshow("SubTraction {0}".format(i), subtraction)
 
         #Find the contour for each finger
         _, contours, _ = cv.findContours(subtraction, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE) 
@@ -616,6 +632,15 @@ def processHands(hands, mask):
 
 
 def drawResultsInImage(mask, image, hsvImage, hands):
+    global mouseX, mouseY, real_time, sample_points
+
+    # Draw Realtime Sample Points
+    if real_time:
+        h, w = image.shape[:2]
+        for p in sample_points:
+            px, py = p
+            point = (int(px*w), int(py*h))
+            cv.circle(image, point, 3, (0,255,255), 1)
 
     for hand in hands:
 
@@ -670,7 +695,7 @@ def drawResultsInImage(mask, image, hsvImage, hands):
         for finger in hand.finger_list:
             offsetedPoints = [ [[lx+x, ly+y]] for [lx,ly] in finger.rect_points ]
             offsetedPoints = np.array(offsetedPoints)
-            print(finger.index)
+            #print(finger.index)
             color = (255, finger.index * 51, 0) if not finger.is_thumb else (128,255,0)
             cv.drawContours(image, [offsetedPoints], 0, color, 2)
             top = vector_add(finger.top, (x,y))
@@ -706,12 +731,48 @@ def drawResultsInImage(mask, image, hsvImage, hands):
     # cv.imshow("DT", distance_transform)
 
 
-    while(cv.waitKey(0) != 27): continue
+    #while(cv.waitKey(0) != 27): continue
     #cv.imshow("HSV", hsvImage)
+
+def calculate_range(value, offset, min_v, max_v):
+    return (max(value - offset, min_v), min(value + offset, max_v))
+
+# Sample points from the HSV image and calculates the mean of h,s,v  components
+def calibrateHSV(image):
+    global hue_range, saturation_range, value_range
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    height, width = image.shape[:2]
+
+    h_offset = 25
+    s_offset = 60
+    v_offset = 100
+
+    sum_h = 0
+    sum_s = 0
+    sum_v = 0
+
+    for p in sample_points:
+        px, py = p
+        (x,y) = (int(px*width), int(py*height))
+        h,s,v = hsv[y,x]
+        sum_h += h
+        sum_s += s
+        sum_v += v
     
+    sum_h /= len(sample_points)
+    sum_s /= len(sample_points)
+    sum_v /= len(sample_points)
+
+    sum_h = int(sum_h)
+    sum_s = int(sum_s)
+    sum_v = int(sum_v)
+    
+    hue_range = calculate_range(sum_h, h_offset, 0, 255)
+    saturation_range = calculate_range(sum_s, s_offset, 0, 255)
+    value_range = calculate_range(sum_v, v_offset, 0, 255)
 
 def processImage(image):
-    global mouseX, mouseY
+    global mouseX, mouseY, hue_range, saturation_range, value_range, real_time
     # Apply Gaussian blur
     h,w = image.shape[:2]
     minP = int(min(h,w) * 0.005)
@@ -729,7 +790,7 @@ def processImage(image):
     hsvImage = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     #hsvImage = clustering(hsvImage)
     # (h, s, v) = cv.split(hsvImage)
-    #hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
+    hsvImage = cv.pyrMeanShiftFiltering(hsvImage, 2, 25, maxLevel = 1)
     #(h, s, v) = cv.split(hsvImage)
     
     # h3 = cv.Sobel(h,cv.CV_8U, 1, 1, ksize = 3)
@@ -760,6 +821,11 @@ def processImage(image):
     lower = (minH,minS, minV)
     upper = (maxH, maxS, maxV)
 
+    if(real_time):
+        lower = (hue_range[0], saturation_range[0], value_range[0])
+        upper = (hue_range[1], saturation_range[1], value_range[1])
+    print(lower, upper)
+
     # Mask HS Values
     mask = cv.inRange(hsvImage, lower, upper)
 
@@ -786,19 +852,37 @@ def processImage(image):
     return res
 
 def testRealTime():
+    global real_time
+    real_time = True
     video = cv.VideoCapture(0)
     while(True):
         _, img = video.read()
         processImage(img)
-
-        if(cv.waitKey(1) == 27):
+        key = cv.waitKey(1)
+        if key == 27:
             break
+        elif key == ord('s'):
+            calibrateHSV(img)
+
+def process_file(path):
+    image = cv.imread(path, cv.IMREAD_COLOR)
+    processImage(image)
+    while(cv.waitKey(0) != 27): continue
 
 def test():
-    image = cv.imread('data-set/hand-signs/Y/1.png', cv.IMREAD_COLOR)
+    process_file('data-set/hand-signs/all_right/1.jpg')
+    process_file('data-set/hand-signs/all_right/2.jpg')
+    process_file('data-set/hand-signs/I/0.png')
+    process_file('data-set/hand-signs/I/1.png')
+    process_file('data-set/hand-signs/ILY/0.png')
+    process_file('data-set/hand-signs/ILY/1.png')
+    process_file('data-set/hand-signs/L/1.png')
+    process_file('data-set/hand-signs/L/2.png')
+    process_file('data-set/hand-signs/v/0.png')
+    process_file('data-set/hand-signs/v/1.png')
+    process_file('data-set/hand-signs/Y/1.png')
     #image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
-    result = processImage(image)
-    print(result)
+    #print(result)
 
     # hsvImage = cv.cvtColor(result, cv.COLOR_BGR2HSV)
 
@@ -811,5 +895,6 @@ def test():
 
     while(cv.waitKey(0) != 27): continue
 
+#testRealTime()
 test()
 
