@@ -21,7 +21,6 @@ sample_points = [
     [0.5,0.6],
 ]
 
-
 class Finger:
     def __init__(self, rect, contour):
         
@@ -402,23 +401,24 @@ def compute_convexity_defects(contour, hull, threshold=90):
             return np.array(result)
 
     defects = cv.convexityDefects(contour, hull)
-    for i in range(defects.shape[0]):
-        defect = defects[i]
-        s, e, f, d = defect[0]
-        start = tuple(contour[s][0])
-        end = tuple(contour[e][0])
-        far = tuple(contour[f][0])
+    if hasattr(defects, 'shape'):
+        for i in range(defects.shape[0]):
+            defect = defects[i]
+            s, e, f, d = defect[0]
+            start = tuple(contour[s][0])
+            end = tuple(contour[e][0])
+            far = tuple(contour[f][0])
 
-        mDist = max( [distance_sqr(start,far), distance_sqr(end,far)] )
+            mDist = max( [distance_sqr(start,far), distance_sqr(end,far)] )
 
-        ang = angle(far, start, end)
+            ang = angle(far, start, end)
 
-        #Work around to filter lower convexity points
-        if far[1] < start[1] or far[1] < end[1]:
-            continue
+            #Work around to filter lower convexity points
+            if far[1] < start[1] or far[1] < end[1]:
+                continue
 
-        if(mDist >= lengthSQR and ang <= thresh):
-            result.append(defect)
+            if(mDist >= lengthSQR and ang <= thresh):
+                result.append(defect)
     
     result = np.array(result)
     return result
@@ -443,12 +443,13 @@ def calculate_hand_points(contours):
 
         defects = compute_convexity_defects(contour, cv.convexHull(contour, returnPoints=False))
 
-        for i in range(defects.shape[0]) :
-            s, e, _, _ = defects[i,0]
-            start = tuple(contour[s][0])
-            end = tuple(contour[e][0])
-            add_point_to_hand(handPoints, start, length)
-            add_point_to_hand(handPoints, end, length)
+        if hasattr(defects, 'shape'):
+            for i in range(defects.shape[0]):
+                s, e, _, _ = defects[i,0]
+                start = tuple(contour[s][0])
+                end = tuple(contour[e][0])
+                add_point_to_hand(handPoints, start, length)
+                add_point_to_hand(handPoints, end, length)
 
         # if(len(handPoints) == 0):
         #     continue
@@ -569,7 +570,7 @@ def processHands(hands, mask):
 
         # Debuging the distance transform
         if DEBUG:
-            cv.mshow("distance_transform {0}".format(i), distance_transform)
+            cv.imshow("distance_transform {0}".format(i), distance_transform)
 
         # Normalize and convert the threshhold to uint8 (to later subtract)
         cv.normalize(thresh, thresh, 0, 255, cv.NORM_MINMAX)
@@ -851,6 +852,25 @@ def processImage(image):
     
     return res
 
+def processImageRealTime(mask):
+    global mouseX, mouseY, hue_range, saturation_range, value_range, real_time
+    # Find the contours of different hands
+    ret, contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    imageArea = mask.shape[0] * mask.shape[1]
+    contours = filter_contour_size(contours, imageArea/2)
+
+    # Calculate points closest to a Point of Interest
+    hands = calculate_hand_points(contours)
+    hands.sort(key=lambda x: x.center[0])
+
+    processHands(hands, mask)
+
+    res = []
+    for hand in hands:
+        res.append(hand.fingers)
+    
+    return res
+
 def testRealTime():
     global real_time
     real_time = True
@@ -896,5 +916,5 @@ def test():
     while(cv.waitKey(0) != 27): continue
 
 #testRealTime()
-test()
+# test()
 
