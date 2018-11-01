@@ -193,6 +193,8 @@ class Hand:
             self.pose = 'Y'
         elif self.is_ily_pose():
             self.pose = 'ILY'
+        elif self.is_i_pose():
+            self.pose = 'I'
 
         print('Pose: {0}'.format(self.pose))
     
@@ -226,6 +228,12 @@ class Hand:
         sqr_dist *= sqr_dist
 
         return distance > sqr_dist and vectors_angle(pinky.tangent, self.thumb.tangent) > Hand.Y_ANGLE
+
+    def is_i_pose(self):
+        if len(self.finger_list) != 1: return
+        if self.thumb != None: return
+       
+        return True
 
 
 def clustering(image):
@@ -744,7 +752,7 @@ def testRealTime():
             break
 
 def test():
-    image = cv.imread('data-set/hand-signs/ILY/0.png', cv.IMREAD_COLOR)
+    image = cv.imread('data-set/hand-signs/I/2.png', cv.IMREAD_COLOR)
     #image = cv.imread('data-set/one-hand/5/five_fingers2.jpg', cv.IMREAD_COLOR)
     result = processImage(image)
     print(result)

@@ -63,4 +63,4 @@ def testAllOneHandImgs():
     print('Success ratio:', correctAns / totalTests)
     print('***************')        
 
-testAllManyHandsImgs()
+testAllOneHandImgs()
