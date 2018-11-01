@@ -873,7 +873,7 @@ def test():
     process_file('data-set/hand-signs/all_right/1.jpg')
     process_file('data-set/hand-signs/all_right/2.jpg')
     process_file('data-set/hand-signs/I/0.png')
-    process_file('data-set/hand-signs/I/1.png')
+    process_file('data-set/hand-signs/I/1.jpg')
     process_file('data-set/hand-signs/ILY/0.png')
     process_file('data-set/hand-signs/ILY/1.png')
     process_file('data-set/hand-signs/L/1.png')
